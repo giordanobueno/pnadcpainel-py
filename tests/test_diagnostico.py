@@ -39,3 +39,15 @@ def test_mensagem_diagnostico_produz_formato_correto():
     assert "Diagnóstico do painel PNADc - ano 2023" in msg
     assert "Linhas antes do cruzamento" in msg
     assert "descompasso temporal" in msg
+
+
+def test_mensagem_diagnostico_usa_ponto_separador_milhar_brasileiro():
+    # DataFrame com mais de 1000 linhas para validar o separador de milhar brasileiro (ponto)
+    df_antes = pd.DataFrame({"VD5002": [1000.0] * 1234})
+    df_depois = pd.DataFrame({"VD5002": [1000.0] * 1000})
+    diag = diagnosticar_painel(df_antes, colunas=["VD5002"])
+
+    msg = mensagem_diagnostico(diag, df_antes, df_depois, ano=2023)
+    assert "1.234" in msg
+    assert "1,234" not in msg
+

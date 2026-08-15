@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pnadcpainel"
-version = "0.1.0"
+version = "0.1.1"
 description = "Painel Consolidado Pessoa e Domicilio da PNAD Continua (IBGE + Data Zoom)"
 readme = "README.md"
 authors = [

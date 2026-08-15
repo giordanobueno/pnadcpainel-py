@@ -10,7 +10,7 @@ from .memoria import downcast_pnadc
 from .defaults import vars_tri_default, vars_visita_default
 from ._ibge_source import set_mock_provider, get_mock_provider
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "gerar_painel_pnadc",

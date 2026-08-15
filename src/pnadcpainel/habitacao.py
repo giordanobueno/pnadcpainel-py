@@ -59,27 +59,26 @@ def consolidar_base_habitacao(
 
     # 2. Ano anterior
     ano_anterior = ano - 1
-    if ano_anterior >= 2012:
-        try:
-            if verbose:
-                print(f">>> Baixando Habitacao {ano_anterior} (Visita 1)...")
-            df_anterior = get_pnadc_internal(
-                year=ano_anterior,
-                interview=1,
-                vars=vars_visita if isinstance(vars_visita, list) else None,
-                design=False,
-                labels=False,
-                verbose=verbose
-            )
-            if df_anterior is not None and not df_anterior.empty:
-                casa_anterior = downcast_pnadc(df_anterior)
-                dados_casa_lista.append(casa_anterior)
-        except Exception as e:
-            warnings.warn(
-                f"Nao foi possivel baixar dados de Visita 1 para o ano anterior ({ano_anterior}). "
-                f"A consolidacao sera realizada apenas com os dados de {ano}. Erro: {e}",
-                UserWarning
-            )
+    try:
+        if verbose:
+            print(f">>> Baixando Habitacao {ano_anterior} (Visita 1)...")
+        df_anterior = get_pnadc_internal(
+            year=ano_anterior,
+            interview=1,
+            vars=vars_visita if isinstance(vars_visita, list) else None,
+            design=False,
+            labels=False,
+            verbose=verbose
+        )
+        if df_anterior is not None and not df_anterior.empty:
+            casa_anterior = downcast_pnadc(df_anterior)
+            dados_casa_lista.append(casa_anterior)
+    except Exception as e:
+        warnings.warn(
+            f"Nao foi possivel baixar dados de Visita 1 para o ano anterior ({ano_anterior}). "
+            f"A consolidacao sera realizada apenas com os dados de {ano}. Erro: {e}",
+            UserWarning
+        )
 
     dados_casa_total = pd.concat(dados_casa_lista, ignore_index=True)
 

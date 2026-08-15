@@ -39,15 +39,27 @@
   `["V2007", "V2008", "V20081", "V20082", "V2001", "V2005", "V2009", "VD3004", "V3001", "VD4001", "VD4002", "VD4009", "VD4010", "V5001A", "V5002A", "S01013", "S01006", "S01010", "Ano", "Trimestre", "UF"]`
 
 ### 2.3 Consolidação de Habitação (Visita 1)
-- Tenta baixar dados de Visita 1 para `ano` e para `ano - 1` (se `ano - 1 >= 2012`).
-- Se o ano anterior falhar por erro de rede/IBGE, lança um `warning` não fatal e prossegue usando apenas `ano`. Se `ano` corrente falhar, lança erro fatal.
+- Tenta baixar dados de Visita 1 para `ano` e para `ano - 1`.
+- Se o ano anterior falhar por erro de rede/IBGE, lança um `UserWarning` não fatal e prossegue usando apenas `ano`. Se `ano` corrente falhar, lança erro fatal.
 - Combina as duas tabelas (`pd.concat`).
 - Agrupa por `id_dom` e escolhe a **primeira resposta não-NA** de cada variável de habitação (`dropna().iloc[0]`). Se todas forem NA, mantém a primeira.
 
 ### 2.4 Diagnóstico & Balanceamento
-- Diagnóstico gera `total_linhas`, `com_dado`, `sem_dado`, `pct_disponivel = round((com_dado / total_linhas) * 100, 2)`.
+- Diagnóstico gera `total_linhas`, `com_dado`, `sem_dado`, `pct_disponivel = round((com_dado / total_linhas) * 100, 2)`. Formatação de inteiros com separador de milhar brasileiro (ponto).
 - Se `balancear=True`, filtra mantendo apenas linhas onde todas as variáveis específicas de Visita 1 selecionadas sejam não-NA.
 - Variáveis da base trimestral **NÃO** causam exclusão de linha no balanceamento.
 
 ### 2.5 Mock Provider & Testes Offline
 - Permite registrar um provider customizado `pnadcpainel.set_mock_provider(fn)` para interceptar chamadas ao IBGE nos testes.
+
+---
+
+## 3. Correções pós-auditoria de QA (v0.1.1)
+
+1. **Bug 1 (`TypeError`)**: Corrigido nome do parâmetro de `expr` para `func` na chamada a `executar_com_retry` em `_ibge_source.py`.
+2. **Bug 2 (Descoberta Dinâmica de Nomes ZIP no IBGE)**: Implementada função `_resolve_ibge_filename` que consome o índice HTML do IBGE e localiza dinamicamente o arquivo `.zip` publicado com sufixo `_YYYYMMDD.zip` via Regex, evitando erros 404 por nomes estáticos.
+3. **Bug 3 (Leitura de Microdados de Largura Fixa - FWF)**: Implementado parser de dicionário SAS (`_get_sas_input_spec` e `_parse_sas_input_file`) consumindo a pasta `Documentacao/` do IBGE, calculando `colspecs` (posições 0-indexed) e lendo arquivos `.txt` de largura fixa via `pd.read_fwf(colspecs=..., names=..., dtype=str)`.
+4. **Bug 4 (Texto da Licença MIT)**: Arquivo `LICENSE` substituído pelo texto padrão integral da licença MIT.
+5. **Bug 5 (Formatação numéricas BR)**: Função `mensagem_diagnostico` atualizada com o helper `_fmt_br()` para usar ponto como separador de milhar brasileiro (`1.234.567`).
+6. **Bug 6 (Caso de borda `ano=2012`)**: Removida a checagem `if ano_anterior >= 2012:` em `consolidar_base_habitacao()`, garantindo que a tentativa para o ano anterior (`2011`) seja executada e capturada pelo `try/except`, emitindo `UserWarning` idêntico ao comportamento do R.
+7. **Bug 7 (Gaps no README & Instrução de Instalação PyPI)**: Adicionadas as seções *"🔬 Metodologia"* e *"⚠️ Limitações Conhecidas & Descompasso Temporal"* no `README.md`, e ajustada a instrução de instalação para `pip install git+https://github.com/giordanobueno/pnadcpainel-py.git`.

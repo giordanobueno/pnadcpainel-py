@@ -70,3 +70,48 @@ def test_falha_do_ano_anterior_gera_warning_nao_fatal_e_falha_do_corrente_gera_e
     set_mock_provider(mock_falha_corrente)
     with pytest.raises(RuntimeError, match="Falha ao baixar dados de Visita 1"):
         gerar_painel_pnadc(ano=2023, verbose=False)
+
+
+def test_executar_com_retry_com_parametro_func_e_retry_sucesso():
+    from pnadcpainel._retry import executar_com_retry
+
+    tentativas = 0
+
+    def _operacao_instavel():
+        nonlocal tentativas
+        tentativas += 1
+        if tentativas < 2:
+            raise ValueError("Erro temporário de conexão")
+        return "sucesso"
+
+    res = executar_com_retry(func=_operacao_instavel, max_tentativas=3, delay_inicial=0.01, verbose=False)
+    assert res == "sucesso"
+    assert tentativas == 2
+
+
+def test_ano_2012_tenta_baixar_ano_anterior_2011_e_emite_warning():
+    base_mock = criar_mock_provider()
+
+    def mock_falha_2011(year, quarter=None, interview=None, vars=None, **kwargs):
+        if interview is not None and year == 2011:
+            raise RuntimeError("Visita 1 para 2011 não existe no IBGE.")
+        return base_mock(year, quarter, interview, vars, **kwargs)
+
+    set_mock_provider(mock_falha_2011)
+    with pytest.warns(UserWarning, match="Nao foi possivel baixar dados de Visita 1 para o ano anterior \\(2011\\)"):
+        p = gerar_painel_pnadc(ano=2012, verbose=False)
+        assert isinstance(p, pd.DataFrame)
+
+
+def test_parse_sas_input_file_e_resolve_filename():
+    from pnadcpainel._ibge_source import _parse_sas_input_file, _resolve_ibge_filename
+
+    sas_text = """
+    @00001 UPA $9.
+    @00010 V1008 $2.
+    @00012 V1014 $2.
+    """
+    colspecs, names = _parse_sas_input_file(sas_text)
+    assert names == ["UPA", "V1008", "V1014"]
+    assert colspecs == [(0, 9), (9, 11), (11, 13)]
+

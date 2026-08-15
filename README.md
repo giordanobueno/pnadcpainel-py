@@ -3,7 +3,7 @@
 > **Painel Consolidado Pessoa e Domicílio da PNAD Contínua (IBGE)**
 > *Implementação em Python com metodologia de identificação longitudinal do Data Zoom (PUC-Rio).*
 
-[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://pypi.org/project/pnadcpainel/)
+[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://github.com/giordanobueno/pnadcpainel-py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -28,15 +28,13 @@ Para maiores detalhes sobre a metodologia original e publicações acadêmicas d
 
 ## 🚀 Instalação
 
-```bash
-pip install pnadcpainel
-```
-
-Ou instale a versão de desenvolvimento diretamente do GitHub:
+Instale a versão de desenvolvimento diretamente do GitHub:
 
 ```bash
 pip install git+https://github.com/giordanobueno/pnadcpainel-py.git
 ```
+
+> *Nota: A publicação no PyPI (`pip install pnadcpainel`) estará disponível em breve.*
 
 ---
 
@@ -57,7 +55,7 @@ print(painel_2023.attrs["diagnostico"])
 
 ---
 
-## ⚙️ Customização de Variáveis
+## 🎨 Customização de Variáveis
 
 Você pode selecionar apenas as variáveis de seu interesse para acelerar o download e economizar memória RAM:
 
@@ -78,6 +76,37 @@ painel_completo = gerar_painel_pnadc(
     vars_tri="todas",
     vars_visita="todas"
 )
+```
+
+---
+
+## 🔬 Metodologia
+
+A construção dos identificadores únicos de domicílio (`id_dom`) e indivíduo (`id_ind`) segue a metodologia desenvolvida pelo **Data Zoom (Departamento de Economia da PUC-Rio)** para acompanhamento longitudinal da PNAD Contínua:
+
+- **`id_dom`**: Combinação de `UPA` + `V1008` (número do domicílio) + `V1014` (painel).
+- **`id_ind`**: Combinação de `id_dom` + dia de nascimento (`V2008`) + mês de nascimento (`V20081`) + ano de nascimento (`V20082`) + sexo (`V2007`) + `UF`.
+
+---
+
+## ⚠️ Limitações Conhecidas & Descompasso Temporal
+
+A PNAD Contínua acompanha cada domicílio em **5 entrevistas trimestrais consecutivas**. Contudo, existem diferenças de periodicidade entre os temas da pesquisa:
+
+1. **Base Trimestral**: Coletada a cada trimestre (4 trimestres por ano) com dados de mercado de trabalho, ocupação, renda de todos os trabalhos e composição demográfica.
+2. **Base de Visita 1 (Habitação/Anual)**: Coletada apenas na **primeira entrevista** do domicílio (Visita 1). Contém informações estruturais da casa (água, lixo, dormitórios), recebimento de programas sociais (Bolsa Família, BPC) e renda domiciliar per capita (`VD5002`).
+
+### Consequências no Cruzamento:
+- Um domicílio acompanhado na base trimestral durante um determinado trimestre pode ter realizado sua Visita 1 em um ano anterior ou período fora da janela baixada, resultando em valores ausentes (`NaN`) após o `left_join`.
+- A perda de dados **não é uniforme entre as variáveis** — algumas colunas da Visita 1 possuem maior taxa de emparelhamento do que outras.
+
+### Estratégia de Balanceamento (`balancear`):
+- Por padrão (`balancear=True`), o pacote filtra o painel final para manter **apenas as observações completas em todas as variáveis de habitação/Visita 1**.
+- Isso produz um **painel retangular sem `NaN`s** nas variáveis de habitação, ao custo de uma redução amostral (reportada no console via `mensagem_diagnostico()`).
+- Caso deseje manter a amostra total com valores `NaN` para tratamento próprio (ex.: imputação ou análises específicas), defina `balancear=False`:
+
+```python
+painel_bruto = gerar_painel_pnadc(ano=2023, balancear=False)
 ```
 
 ---

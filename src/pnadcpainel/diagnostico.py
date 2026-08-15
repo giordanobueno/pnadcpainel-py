@@ -74,6 +74,10 @@ def diagnosticar_painel(
     return diag_df
 
 
+def _fmt_br(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
 def mensagem_diagnostico(
     diagnostico: pd.DataFrame,
     painel_antes: Optional[pd.DataFrame],
@@ -115,9 +119,9 @@ def mensagem_diagnostico(
 
     msg = (
         f"\n>>> Diagnóstico do painel PNADc - ano {ano}\n"
-        f"Linhas antes do cruzamento (base trimestral): {n_antes:,}\n"
-        f"Linhas após cruzamento + balanceamento:       {n_depois:,}\n"
-        f"Perda total: {perda_abs:,} linhas ({perda_pct:.2f}%)\n"
+        f"Linhas antes do cruzamento (base trimestral): {_fmt_br(n_antes)}\n"
+        f"Linhas após cruzamento + balanceamento:       {_fmt_br(n_depois)}\n"
+        f"Perda total: {_fmt_br(perda_abs)} linhas ({perda_pct:.2f}%)\n"
         f"Variável com maior perda antes do balanceamento: {var_critica} - {pct_ausente_critica:.2f}% de dados ausentes\n"
         f"Motivo: descompasso temporal entre a base trimestral (Ano/Trimestre corrente) "
         f"e a base de Visita 1 (entrevista específica, ano corrente + ano anterior).\n"
