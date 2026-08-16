@@ -3,8 +3,7 @@ Configurações e fixtures globais do Pytest.
 """
 
 import pytest
-from pnadcpainel._ibge_source import set_mock_provider
-from tests.fixtures.synthetic_pnadc import criar_mock_provider
+from pnadcpainel import set_mock_provider
 
 
 @pytest.fixture(autouse=True)
