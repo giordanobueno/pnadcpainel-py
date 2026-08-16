@@ -24,6 +24,8 @@ Este pacote é uma iniciativa independente criada para facilitar a pesquisa quan
 Para maiores detalhes sobre a metodologia original e publicações acadêmicas do Data Zoom, acesse:
 🔗 [datazoom.puc-rio.br](https://www.econ.puc-rio.br/datazoom/)
 
+> **Importante**: A montagem atual deste pacote consolida os microdados e identificadores longitudinais, mas não realiza o cálculo de estimativas amostrais nem a calibração/expansão de pesos amostracionais da PNADc.
+
 ---
 
 ## 🚀 Instalação
@@ -140,6 +142,21 @@ Você também pode chamar a função explícita `diagnosticar_painel`:
 ```python
 diag_df = diagnosticar_painel(painel_2023, colunas=["VD5002", "S01013"])
 ```
+
+---
+
+## 📋 Tabela de Paridade de API (R vs Python)
+
+| Função em R | Função em Python | Status Público | Parâmetros e Defaults | Tipo de Retorno |
+| :--- | :--- | :--- | :--- | :--- |
+| `gerar_painel_pnadc()` | `gerar_painel_pnadc()` | Exportada | `ano` (int), `vars_tri=None`, `vars_visita=None`, `balancear=True`, `low_memory=False`, `verbose=True` | `pd.DataFrame` (com `.attrs["diagnostico"]`) |
+| `criar_ids_datazoom()` | `criar_ids_datazoom()` | Exportada | `dados` (`pd.DataFrame`) | `pd.DataFrame` |
+| `consolidar_base_habitacao()` | `consolidar_base_habitacao()` | Exportada | `ano` (int), `vars_visita=vars_visita_default`, `verbose=True` | `pd.DataFrame` |
+| `diagnosticar_painel()` | `diagnosticar_painel()` | Exportada | `painel` (`pd.DataFrame`), `colunas=None` | `pd.DataFrame` |
+| `mensagem_diagnostico()` | `mensagem_diagnostico()` | Exportada | `diagnostico`, `painel_antes`, `painel_depois`, `ano` | `str` |
+| `vars_tri_default` | `vars_tri_default` | Exportada | N/A (Constante) | `List[str]` |
+| `vars_visita_default` | `vars_visita_default` | Exportada | N/A (Constante) | `List[str]` |
+| `downcast_pnadc()` | `downcast_pnadc()` | Exportada | `df` (`pd.DataFrame`) | `pd.DataFrame` |
 
 ---
 

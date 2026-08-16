@@ -34,13 +34,7 @@ def diagnosticar_painel(
         cols = [c for c in colunas if c in painel.columns]
 
     if not cols:
-        return pd.DataFrame({
-            "variavel": pd.Series(dtype="str"),
-            "total_linhas": pd.Series(dtype="int64"),
-            "com_dado": pd.Series(dtype="int64"),
-            "sem_dado": pd.Series(dtype="int64"),
-            "pct_disponivel": pd.Series(dtype="float64")
-        })
+        raise ValueError("Nenhuma coluna valida fornecida para diagnostico.")
 
     n_total = len(painel)
     if n_total == 0:
@@ -53,7 +47,8 @@ def diagnosticar_painel(
                 "sem_dado": 0,
                 "pct_disponivel": 0.0
             })
-        return pd.DataFrame(res)
+        diag_df = pd.DataFrame(res)
+        return diag_df.sort_values(by=["pct_disponivel", "variavel"], ascending=[True, True], kind="mergesort").reset_index(drop=True)
 
     registros = []
     for col in cols:
@@ -69,8 +64,15 @@ def diagnosticar_painel(
             "pct_disponivel": pct
         })
 
-    diag_df = pd.DataFrame(registros)
-    diag_df = diag_df.sort_values(by="pct_disponivel", ascending=True).reset_index(drop=True)
+    diag_df = (
+        pd.DataFrame(registros)
+        .sort_values(
+            by=["pct_disponivel", "variavel"],
+            ascending=[True, True],
+            kind="mergesort",
+        )
+        .reset_index(drop=True)
+    )
     return diag_df
 
 

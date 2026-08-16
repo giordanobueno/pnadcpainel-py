@@ -8,19 +8,25 @@ import re
 import io
 import zipfile
 import tempfile
+import warnings
 import requests
 import pandas as pd
 from typing import List, Optional, Callable, Dict, Tuple, Any
 
 from ._retry import executar_com_retry
-from .defaults import vars_tri_default, vars_visita_default
+from .defaults import (
+    vars_tri_default,
+    vars_visita_default,
+    chaves_obrig_tri,
+    chaves_obrig_visita,
+)
 
 # Provider mock global para testes offline
 _mock_provider: Optional[Callable[..., pd.DataFrame]] = None
 
 # Caches em memória para nomes de arquivos e especificações de leiaute SAS
 _filename_cache: Dict[Tuple[str, str], str] = {}
-_dict_cache: Dict[bool, Tuple[List[Tuple[int, int]], List[str]]] = {}
+_dict_cache: Dict[Tuple[bool, int, int], Tuple[List[Tuple[int, int]], List[str]]] = {}
 
 
 def set_mock_provider(provider: Optional[Callable[..., pd.DataFrame]]) -> None:
@@ -77,7 +83,8 @@ def get_pnadc_internal(
 def _resolve_ibge_filename(url_dir: str, pattern_str: str) -> str:
     """
     Busca no índice do diretório HTTP do IBGE o nome do arquivo .zip que corresponde
-    ao padrão regex informado (ex: PNADC_012023_YYYYMMDD.zip).
+    ao padrão regex informado (ex: PNADC_012023_YYYYMMDD.zip ou PNADC_2023_visita1_YYYYMMDD.zip).
+    Aceita links relativos e absolutos em tags href HTML.
     """
     cache_key = (url_dir, pattern_str)
     if cache_key in _filename_cache:
@@ -86,16 +93,24 @@ def _resolve_ibge_filename(url_dir: str, pattern_str: str) -> str:
     resp = requests.get(url_dir, timeout=30)
     resp.raise_for_status()
 
+    # Extrair todos os links href HTML
+    href_links = re.findall(r'href=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
+
     regex = re.compile(pattern_str, re.IGNORECASE)
-    matches = regex.findall(resp.text)
+    matches: List[str] = []
+
+    for link in href_links:
+        # Extrair nome do arquivo basename descartando caminhos relativos/absolutos
+        clean_name = os.path.basename(link.split("?")[0])
+        if regex.search(clean_name):
+            matches.append(clean_name)
+
+    matches = sorted(list(set(matches)), reverse=True)
 
     if not matches:
         raise RuntimeError(f"Nenhum arquivo correspondente ao padrão '{pattern_str}' foi encontrado em {url_dir}")
 
-    # Ordenar decrescente para pegar a versão com data de publicação mais recente se houver múltiplas
-    matches.sort(reverse=True)
     selected_filename = matches[0]
-
     _filename_cache[cache_key] = selected_filename
     return selected_filename
 
@@ -125,35 +140,66 @@ def _parse_sas_input_file(content_text: str) -> Tuple[List[Tuple[int, int]], Lis
     return colspecs, names
 
 
-def _get_sas_input_spec(is_visita: bool) -> Tuple[List[Tuple[int, int]], List[str]]:
+def _get_sas_input_spec(is_visita: bool, interview: int = 1, year: int = 2023) -> Tuple[List[Tuple[int, int]], List[str]]:
     """
     Obtém a especificação de largura fixa (colspecs e names) do dicionário IBGE na pasta Documentacao.
     """
-    if is_visita in _dict_cache:
-        return _dict_cache[is_visita]
+    cache_key = (is_visita, interview, year)
+    if cache_key in _dict_cache:
+        return _dict_cache[cache_key]
 
     base_doc_url = "https://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostra_de_Domicilios_continua"
-    doc_dir = f"{base_doc_url}/Anual/Microdados/Documentacao" if is_visita else f"{base_doc_url}/Trimestral/Microdados/Documentacao"
+    if is_visita:
+        doc_dir = f"{base_doc_url}/Anual/Microdados/Visita/Visita_{interview}/Documentacao"
+    else:
+        doc_dir = f"{base_doc_url}/Trimestral/Microdados/Documentacao"
 
     resp = requests.get(doc_dir, timeout=30)
     resp.raise_for_status()
 
-    # Procurar arquivo de dicionário/input .zip ou .txt
-    match = re.search(r'href="([^"]*Dicionario[^"]*\.zip)"', resp.text, re.IGNORECASE)
-    if not match:
-        match = re.search(r'href="([^"]*input[^"]*\.txt)"', resp.text, re.IGNORECASE)
+    href_links = re.findall(r'href=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
 
-    if not match:
+    # Buscar arquivo de dicionário/input: aceitar input_PNADC_2023_visita1_*.txt, input_*.txt, Dicionario_*.zip ou *.txt
+    match_file = None
+
+    # Tentar match estrito de input de visita se is_visita
+    if is_visita:
+        for link in href_links:
+            clean_name = os.path.basename(link.split("?")[0])
+            if re.search(rf"input_PNADC_{year}_visita{interview}.*\.txt$", clean_name, re.IGNORECASE):
+                match_file = clean_name
+                break
+
+    if not match_file:
+        for link in href_links:
+            clean_name = os.path.basename(link.split("?")[0])
+            if "input" in clean_name.lower() and clean_name.lower().endswith(".txt"):
+                match_file = clean_name
+                break
+
+    if not match_file:
+        for link in href_links:
+            clean_name = os.path.basename(link.split("?")[0])
+            if "dicionario" in clean_name.lower() and clean_name.lower().endswith(".zip"):
+                match_file = clean_name
+                break
+
+    if not match_file:
+        for link in href_links:
+            clean_name = os.path.basename(link.split("?")[0])
+            if clean_name.lower().endswith(".zip"):
+                match_file = clean_name
+                break
+
+    if not match_file:
         raise RuntimeError(f"Arquivo de dicionário/input não encontrado em {doc_dir}")
 
-    doc_filename = match.group(1)
-    doc_url = f"{doc_dir}/{doc_filename}"
-
+    doc_url = f"{doc_dir}/{match_file}"
     doc_resp = requests.get(doc_url, timeout=60)
     doc_resp.raise_for_status()
 
     input_text = ""
-    if doc_filename.lower().endswith(".zip"):
+    if match_file.lower().endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(doc_resp.content)) as zf:
             input_files = [f for f in zf.namelist() if "input" in f.lower() and f.lower().endswith(".txt")]
             if not input_files:
@@ -169,7 +215,7 @@ def _get_sas_input_spec(is_visita: bool) -> Tuple[List[Tuple[int, int]], List[st
     if not colspecs or not names:
         raise RuntimeError("Falha ao extrair especificações de colunas do arquivo de input SAS do IBGE.")
 
-    _dict_cache[is_visita] = (colspecs, names)
+    _dict_cache[cache_key] = (colspecs, names)
     return colspecs, names
 
 
@@ -186,11 +232,11 @@ def _download_ibge_ftp(
 
     if quarter is not None:
         url_dir = f"{base_url}/Trimestral/Microdados/{year}"
-        pattern_str = f"PNADC_0{quarter}{year}(?:_\\d{{8}})?\\.zip"
+        pattern_str = rf"PNADC_0{quarter}{year}(?:_\d{{8}})?\.zip"
         is_visita = False
     elif interview is not None:
-        url_dir = f"{base_url}/Anual/Microdados/Visita_{interview}/{year}"
-        pattern_str = f"PNADC_visita{interview}_{year}(?:_\\d{{8}})?\\.zip"
+        url_dir = f"{base_url}/Anual/Microdados/Visita/Visita_{interview}/Dados"
+        pattern_str = rf"PNADC_{year}_visita{interview}(?:_\d{{8}})?\.zip"
         is_visita = True
     else:
         raise ValueError("É necessário especificar 'quarter' ou 'interview'.")
@@ -228,11 +274,23 @@ def _download_ibge_ftp(
         if ";" in first_line:
             df = pd.read_csv(txt_file, sep=";", dtype=str, low_memory=False)
         else:
-            colspecs, names = _get_sas_input_spec(is_visita=is_visita)
+            colspecs, names = _get_sas_input_spec(is_visita=is_visita, interview=interview or 1, year=year)
             df = pd.read_fwf(txt_file, colspecs=colspecs, names=names, dtype=str)
+
+        # Validação de chaves obrigatórias
+        chaves_obrig = chaves_obrig_visita if is_visita else chaves_obrig_tri
+        chaves_faltantes = [k for k in chaves_obrig if k not in df.columns]
+        if chaves_faltantes:
+            raise RuntimeError(f"Colunas obrigatorias ausentes no arquivo baixado: {', '.join(chaves_faltantes)}")
 
         if vars is not None:
             cols_existentes = [c for c in vars if c in df.columns]
+            cols_faltantes = [c for c in vars if c not in df.columns]
+            if cols_faltantes:
+                warnings.warn(
+                    f"Variaveis solicitadas nao encontradas no arquivo: {', '.join(cols_faltantes)}",
+                    UserWarning
+                )
             if cols_existentes:
                 df = df[cols_existentes]
 

@@ -1,11 +1,18 @@
 """
 Otimização de memória RAM e downcast de tipos de dados para microdados PNADc.
+
+Nota sobre equivalência R/Python:
+- Em R, inteiros com NA são representados pelo C integer NA (`NA_integer_`).
+- Em pandas, o tipo `Int32` (nullable integer) utiliza um vetor interno de inteiros 32-bit
+  combinado com uma máscara booleana de NAs. Embora a representação física na memória divirja,
+  ambos são 100% equivalentes semanticamente para todas as operações de valor e teste de ausência.
+- Chaves textuais como `UPA`, `V1008` e `V1014` NUNCA sofrem downcast para manter zeros à esquerda.
 """
 
 import pandas as pd
 from typing import List
 
-# Colunas numéricas/categóricas a serem convertidas para inteiros de 32 bits
+# Colunas numéricas/categóricas a serem convertidas para inteiros de 32 bits com suporte a NA
 COLUNAS_INT: List[str] = [
     "V2007", "V2008", "V20081", "V20082",
     "V2001", "V2005", "V2009",

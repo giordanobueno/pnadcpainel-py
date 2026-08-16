@@ -21,6 +21,4 @@ __all__ = [
     "downcast_pnadc",
     "vars_tri_default",
     "vars_visita_default",
-    "set_mock_provider",
-    "get_mock_provider",
 ]

@@ -10,6 +10,23 @@ COLUNAS_REQUERIDAS_ID: List[str] = [
 ]
 
 
+def _normalize_str_code(series: pd.Series) -> pd.Series:
+    """
+    Normaliza valores para string removendo o sufixo '.0' introduzido por conversão numérica float,
+    mas preservando os valores textuais com zeros à esquerda (ex: '01' continua '01', '1.0' vira '1').
+    """
+    s_str = series.astype(str)
+    return s_str.str.replace(r"\.0$", "", regex=True)
+
+
+def _format_key_str(series: pd.Series) -> pd.Series:
+    """
+    Preserva o valor textual exato fornecido para chaves de identificação (ex: '01', '10').
+    Se o valor contiver sufixo float '.0', remove o '.0', mas nunca converte '01' para '1'.
+    """
+    return _normalize_str_code(series)
+
+
 def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
     """
     Aplica a metodologia desenvolvida pelo Data Zoom (PUC-Rio) para construção
@@ -41,42 +58,44 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
 
     df = dados.copy()
 
-    # Converter temporariamente para tipos numéricos para validação de valores especiais (99, 9999, NA)
+    # Conversão explícita para validação estrita sem fillna(0)
     v2008 = pd.to_numeric(df["V2008"], errors="coerce")
     v20081 = pd.to_numeric(df["V20081"], errors="coerce")
     v20082 = pd.to_numeric(df["V20082"], errors="coerce")
-    v2007 = df["V2007"]
+    v2007 = pd.to_numeric(df["V2007"], errors="coerce")
 
     mascara_valida = (
-        (v2008 != 99) &
-        (v20081 != 99) &
-        (v20082 != 9999) &
-        v2007.notna()
+        v2008.notna()
+        & v20081.notna()
+        & v20082.notna()
+        & v2007.notna()
+        & v2008.ne(99)
+        & v20081.ne(99)
+        & v20082.ne(9999)
     )
 
     df = df[mascara_valida].copy()
 
     if df.empty:
-        # Se ficou vazio, adiciona as colunas esperadas e remove as temporárias
         df["id_dom"] = pd.Series(dtype="object")
         df["id_ind"] = pd.Series(dtype="object")
         df = df.drop(columns=["V2008", "V20081", "V20082"], errors="ignore")
         return df
 
-    # Formatação com zeros à esquerda
-    v2008_clean = pd.to_numeric(df["V2008"], errors="coerce").fillna(0).astype(int)
-    v20081_clean = pd.to_numeric(df["V20081"], errors="coerce").fillna(0).astype(int)
-    v20082_clean = pd.to_numeric(df["V20082"], errors="coerce").fillna(0).astype(int)
+    # Para as linhas válidas, extrair componentes de data
+    v2008_clean = pd.to_numeric(df["V2008"], errors="coerce").astype(int)
+    v20081_clean = pd.to_numeric(df["V20081"], errors="coerce").astype(int)
+    v20082_clean = pd.to_numeric(df["V20082"], errors="coerce").astype(int)
 
     dia = v2008_clean.astype(str).str.zfill(2)
     mes = v20081_clean.astype(str).str.zfill(2)
     ano = v20082_clean.astype(str)
-    sexo = df["V2007"].astype(str).str.split(".").str[0]
-    uf = df["UF"].astype(str).str.split(".").str[0]
 
-    upa = df["UPA"].astype(str)
-    v1008 = df["V1008"].astype(str)
-    v1014 = df["V1014"].astype(str)
+    sexo = _normalize_str_code(df["V2007"])
+    uf = _normalize_str_code(df["UF"])
+    upa = _format_key_str(df["UPA"])
+    v1008 = _format_key_str(df["V1008"])
+    v1014 = _format_key_str(df["V1014"])
 
     id_dom = upa + v1008 + v1014
     id_ind = id_dom + dia + mes + ano + sexo + uf
