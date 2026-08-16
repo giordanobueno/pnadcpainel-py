@@ -10,7 +10,7 @@ from pnadcpainel.defaults import chaves_obrig_tri, chaves_obrig_visita
 
 
 def test_gerar_painel_pnadc_valida_o_ano_de_entrada_rigorosamente():
-    with pytest.raises(ValueError, match="deve ser um unico numero inteiro valido"):
+    with pytest.raises(TypeError):
         gerar_painel_pnadc()
     with pytest.raises(ValueError, match="deve ser um unico numero inteiro valido"):
         gerar_painel_pnadc(ano=None)
@@ -30,6 +30,34 @@ def test_gerar_painel_pnadc_valida_o_ano_de_entrada_rigorosamente():
         gerar_painel_pnadc(ano=[2022, 2023])
     with pytest.raises(ValueError, match="deve ser um numero inteiro valido"):
         gerar_painel_pnadc(ano=2023.5)
+
+
+def test_consolidar_base_habitacao_na_aggregation_first_non_na():
+    from pnadcpainel.habitacao import consolidar_base_habitacao
+    from pnadcpainel._ibge_source import set_mock_provider
+
+    mock_data = pd.DataFrame({
+        "UPA": ["110000016", "110000016"],
+        "V1008": ["01", "01"],
+        "V1014": ["10", "10"],
+        "Ano": [2023, 2023],
+        "UF": ["11", "11"],
+        "S01013": [np.nan, 1.0],      # First row NA, second row 1.0
+        "VD5002": [100.0, np.nan],    # First row 100.0, second row NA
+    })
+
+    def mock_provider(**kwargs):
+        return mock_data.copy()
+
+    set_mock_provider(mock_provider)
+    try:
+        res = consolidar_base_habitacao(ano=2023, vars_visita=["S01013", "VD5002"], verbose=False)
+        assert len(res) == 1
+        assert res["S01013"].iloc[0] == 1.0
+        assert res["VD5002"].iloc[0] == 100.0
+    finally:
+        set_mock_provider(None)
+
 
 
 def test_gerar_painel_pnadc_valida_argumentos_logicos():

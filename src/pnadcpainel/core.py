@@ -23,7 +23,7 @@ from ._ibge_source import get_pnadc_internal
 
 
 def gerar_painel_pnadc(
-    ano: Any = None,
+    ano: int,
     vars_tri: Optional[Union[List[str], str]] = None,
     vars_visita: Optional[Union[List[str], str]] = None,
     balancear: bool = True,

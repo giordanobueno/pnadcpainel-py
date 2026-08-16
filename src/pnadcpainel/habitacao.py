@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 from ._ibge_source import get_pnadc_internal
 from .defaults import vars_visita_default, chaves_obrig_visita
 from .memoria import downcast_pnadc
+from .identificacao import _normalize_str_code, _pad2
 
 
 def consolidar_base_habitacao(
@@ -92,18 +93,18 @@ def consolidar_base_habitacao(
         vars_hab_especificas = [c for c in vars_visita if c not in chaves]
 
     # Construir id_dom
-    upa = dados_casa_total["UPA"].astype(str)
-    v1008 = dados_casa_total["V1008"].astype(str)
-    v1014 = dados_casa_total["V1014"].astype(str)
+    upa = _normalize_str_code(dados_casa_total["UPA"])
+    v1008 = _pad2(dados_casa_total["V1008"])
+    v1014 = _normalize_str_code(dados_casa_total["V1014"])
     dados_casa_total["id_dom"] = upa + v1008 + v1014
 
     cols_manter = ["id_dom"] + [c for c in vars_hab_especificas if c in dados_casa_total.columns]
     sub = dados_casa_total[cols_manter]
 
-    # Agrupar por id_dom e pegar primeira resposta não-NA por coluna
+    # Agrupar por id_dom e pegar primeira resposta não-NA por coluna (replicando lógica do R)
     def _first_non_na(s: pd.Series):
         non_na = s.dropna()
-        return non_na.iloc[0] if len(non_na) > 0 else (s.iloc[0] if len(s) > 0 else None)
+        return non_na.iloc[0] if not non_na.empty else (s.iloc[0] if not s.empty else None)
 
     agg_dict = {c: _first_non_na for c in vars_hab_especificas if c in sub.columns}
 
@@ -113,3 +114,4 @@ def consolidar_base_habitacao(
         base_habitacao = pd.DataFrame({"id_dom": sub["id_dom"].unique()})
 
     return base_habitacao
+

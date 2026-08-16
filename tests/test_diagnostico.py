@@ -51,3 +51,16 @@ def test_mensagem_diagnostico_usa_ponto_separador_milhar_brasileiro():
     assert "1.234" in msg
     assert "1,234" not in msg
 
+
+def test_mensagem_diagnostico_formatacao_brasileira_completa():
+    df_antes = pd.DataFrame({"VD5002": [1.0] * 1000000})
+    df_depois = pd.DataFrame({"VD5002": [1.0] * 750000})
+    diag = diagnosticar_painel(df_antes, colunas=["VD5002"])
+
+    msg = mensagem_diagnostico(diag, df_antes, df_depois, ano=2023)
+    assert "1.000.000" in msg
+    assert "750.000" in msg
+    assert "250.000" in msg
+    assert "25,00%" in msg
+
+

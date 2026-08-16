@@ -79,3 +79,32 @@ def test_arquivo_inexistente_lanca_erro_claro():
                 "https://ftp.ibge.gov.br/test",
                 r"PNADC_999999\.zip"
             )
+
+
+def test_download_vars_none_ou_todas_retorna_todas_as_colunas():
+    import pandas as pd
+    from pnadcpainel.defaults import vars_tri_default
+    from pnadcpainel._ibge_source import set_mock_provider, get_pnadc_internal
+
+    # DataFrame mock contendo as colunas padrão + colunas extras
+    todas_colunas = list(vars_tri_default) + ["EXTRA_VAR1", "EXTRA_VAR2", "EXTRA_VAR3"]
+    df_todas = pd.DataFrame({col: ["1"] for col in todas_colunas})
+
+    def mock_provider(**kwargs):
+        req_vars = kwargs.get("vars")
+        if req_vars is None:
+            return df_todas.copy()
+        else:
+            cols = [c for c in req_vars if c in df_todas.columns]
+            return df_todas[cols].copy()
+
+    set_mock_provider(mock_provider)
+    try:
+        # Quando vars=None, deve retornar todas as colunas
+        res_none = get_pnadc_internal(year=2023, quarter=1, vars=None, verbose=False)
+        assert len(res_none.columns) > len(vars_tri_default)
+        assert "EXTRA_VAR1" in res_none.columns
+        assert "EXTRA_VAR2" in res_none.columns
+    finally:
+        set_mock_provider(None)
+

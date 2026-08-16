@@ -19,6 +19,15 @@ def _normalize_str_code(series: pd.Series) -> pd.Series:
     return s_str.str.replace(r"\.0$", "", regex=True)
 
 
+def _pad2(series: pd.Series) -> pd.Series:
+    """
+    Normaliza valores para string removendo '.0' e aplica zero-padding até 2 dígitos (zfill(2)).
+    Ex: 1 -> '01', '1' -> '01', '01' -> '01', 5 -> '05', 12 -> '12', 1.0 -> '01'.
+    """
+    s_str = _normalize_str_code(series)
+    return s_str.str.zfill(2)
+
+
 def _format_key_str(series: pd.Series) -> pd.Series:
     """
     Preserva o valor textual exato fornecido para chaves de identificação (ex: '01', '10').
@@ -83,19 +92,15 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
         return df
 
     # Para as linhas válidas, extrair componentes de data
-    v2008_clean = pd.to_numeric(df["V2008"], errors="coerce").astype(int)
-    v20081_clean = pd.to_numeric(df["V20081"], errors="coerce").astype(int)
-    v20082_clean = pd.to_numeric(df["V20082"], errors="coerce").astype(int)
-
-    dia = v2008_clean.astype(str).str.zfill(2)
-    mes = v20081_clean.astype(str).str.zfill(2)
-    ano = v20082_clean.astype(str)
+    dia = _pad2(df["V2008"])
+    mes = _pad2(df["V20081"])
+    ano = _normalize_str_code(df["V20082"])
 
     sexo = _normalize_str_code(df["V2007"])
     uf = _normalize_str_code(df["UF"])
-    upa = _format_key_str(df["UPA"])
-    v1008 = _format_key_str(df["V1008"])
-    v1014 = _format_key_str(df["V1014"])
+    upa = _normalize_str_code(df["UPA"])
+    v1008 = _pad2(df["V1008"])
+    v1014 = _normalize_str_code(df["V1014"])
 
     id_dom = upa + v1008 + v1014
     id_ind = id_dom + dia + mes + ano + sexo + uf
@@ -105,3 +110,4 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
 
     df = df.drop(columns=["V2008", "V20081", "V20082"], errors="ignore")
     return df
+

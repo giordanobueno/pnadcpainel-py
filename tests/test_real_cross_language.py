@@ -72,3 +72,44 @@ def test_geracao_de_artefatos_cross_language():
         assert list(read_panel.columns) == list(painel.columns)
         assert read_panel["id_dom"].equals(painel["id_dom"])
         assert read_panel["id_ind"].equals(painel["id_ind"])
+
+
+def test_cross_language_e2e_parity_ids_e_diagnostico():
+    from pnadcpainel.identificacao import criar_ids_datazoom
+    from pnadcpainel.diagnostico import mensagem_diagnostico
+
+    # 1. Testar paridade dos IDs Data Zoom com casos de borda
+    df_input = pd.DataFrame({
+        "UPA": ["110000016", "110000016", "110000016"],
+        "V1008": [1, "01", "10"],               # V1008 int 1 -> '01', str '01' -> '01'
+        "V1014": [10, 10, 10],
+        "V2008": [5, 12, 25],                  # V2008 int 5 -> '05', 12 -> '12'
+        "V20081": [8, 11, 1],                  # V20081 int 8 -> '08'
+        "V20082": [1995, 1988, 2000],
+        "V2007": [1, 2, 1],
+        "UF": [11, 11, 11]
+    })
+
+    res_ids = criar_ids_datazoom(df_input)
+
+    # id_dom = UPA (110000016) + V1008 pad2 (01) + V1014 (10) = 1100000160110
+    assert res_ids["id_dom"].iloc[0] == "1100000160110"
+    assert res_ids["id_dom"].iloc[1] == "1100000160110"
+    assert res_ids["id_dom"].iloc[2] == "1100000161010"
+
+    # id_ind = id_dom + dia(pad2) + mes(pad2) + ano + sexo + uf
+    assert res_ids["id_ind"].iloc[0] == "110000016011005081995111"
+    assert res_ids["id_ind"].iloc[1] == "110000016011012111988211"
+    assert res_ids["id_ind"].iloc[2] == "110000016101025012000111"
+
+    # 2. Testar paridade de diagnóstico e formatação brasileira
+    df_antes = pd.DataFrame({"VD5002": [100.0] * 1000000})
+    df_depois = pd.DataFrame({"VD5002": [100.0] * 750000})
+    diag = diagnosticar_painel(df_antes, colunas=["VD5002"])
+
+    msg = mensagem_diagnostico(diag, df_antes, df_depois, ano=2023)
+    assert "1.000.000" in msg
+    assert "750.000" in msg
+    assert "250.000" in msg
+    assert "25,00%" in msg
+

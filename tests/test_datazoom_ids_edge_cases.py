@@ -102,3 +102,28 @@ def test_saida_vazia_mantem_schema_de_ids():
     assert "id_dom" in res.columns
     assert "id_ind" in res.columns
     assert "V2008" not in res.columns
+
+
+def test_v1008_e_v2008_zero_padding_parity():
+    # V1008 = 1 (int), V1008 = "01" (str), V2008 = 5 (int), V2008 = 12 (int)
+    df = pd.DataFrame({
+        "UPA": ["110000016", "110000016"],
+        "V1008": [1, "01"],
+        "V1014": [10, 10],
+        "V2008": [5, 12],
+        "V20081": [8, 11],
+        "V20082": [1995, 1988],
+        "V2007": [1, 2],
+        "UF": [11, 11]
+    })
+    res = criar_ids_datazoom(df)
+
+    # V1008 = 1 -> '01', V1014 = 10 -> '10', UPA = 110000016 -> '1100000160110'
+    assert res["id_dom"].iloc[0] == "1100000160110"
+    assert res["id_dom"].iloc[1] == "1100000160110"
+
+    # V2008 = 5 -> '05', V20081 = 8 -> '08' -> id_ind: 1100000160110 + 05 + 08 + 1995 + 1 + 11
+    assert res["id_ind"].iloc[0] == "110000016011005081995111"
+    # V2008 = 12 -> '12', V20081 = 11 -> '11' -> id_ind: 1100000160110 + 12 + 11 + 1988 + 2 + 11
+    assert res["id_ind"].iloc[1] == "110000016011012111988211"
+

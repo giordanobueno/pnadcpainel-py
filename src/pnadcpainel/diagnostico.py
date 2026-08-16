@@ -4,7 +4,7 @@ Diagnóstico de preenchimento de variáveis e perda de dados por balanceamento.
 
 import pandas as pd
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 def diagnosticar_painel(
@@ -76,12 +76,21 @@ def diagnosticar_painel(
     return diag_df
 
 
-def _fmt_br(n: int) -> str:
-    return f"{n:,}".replace(",", ".")
+def _format_br(num: Union[int, float]) -> str:
+    """
+    Formata números no padrão brasileiro:
+    - '.' como separador de milhar
+    - ',' como separador decimal (2 casas decimais para floats)
+    """
+    if isinstance(num, float):
+        formatted = f"{num:,.2f}"
+        return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    else:
+        return f"{num:,}".replace(",", ".")
 
 
 def mensagem_diagnostico(
-    diagnostico: pd.DataFrame,
+    diagnostico: Optional[pd.DataFrame],
     painel_antes: Optional[pd.DataFrame],
     painel_depois: Optional[pd.DataFrame],
     ano: int
@@ -92,7 +101,7 @@ def mensagem_diagnostico(
 
     Parameters
     ----------
-    diagnostico : pd.DataFrame
+    diagnostico : pd.DataFrame, optional
         DataFrame gerado por diagnosticar_painel.
     painel_antes : pd.DataFrame, optional
         DataFrame do painel antes do balanceamento.
@@ -119,15 +128,19 @@ def mensagem_diagnostico(
         var_critica = "Nenhuma"
         pct_ausente_critica = 0.0
 
+    perda_pct_str = _format_br(perda_pct)
+    pct_ausente_str = _format_br(pct_ausente_critica)
+
     msg = (
         f"\n>>> Diagnóstico do painel PNADc - ano {ano}\n"
-        f"Linhas antes do cruzamento (base trimestral): {_fmt_br(n_antes)}\n"
-        f"Linhas após cruzamento + balanceamento:       {_fmt_br(n_depois)}\n"
-        f"Perda total: {_fmt_br(perda_abs)} linhas ({perda_pct:.2f}%)\n"
-        f"Variável com maior perda antes do balanceamento: {var_critica} - {pct_ausente_critica:.2f}% de dados ausentes\n"
+        f"Linhas antes do cruzamento (base trimestral): {_format_br(n_antes)}\n"
+        f"Linhas após cruzamento + balanceamento:       {_format_br(n_depois)}\n"
+        f"Perda total: {_format_br(perda_abs)} linhas ({perda_pct_str}%)\n"
+        f"Variável com maior perda antes do balanceamento: {var_critica} - {pct_ausente_str}% de dados ausentes\n"
         f"Motivo: descompasso temporal entre a base trimestral (Ano/Trimestre corrente) "
         f"e a base de Visita 1 (entrevista específica, ano corrente + ano anterior).\n"
     )
 
     print(msg)
     return msg
+
