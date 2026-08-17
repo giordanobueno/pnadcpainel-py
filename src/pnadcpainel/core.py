@@ -58,15 +58,45 @@ COLUNAS_INT: List[str] = [
 ]
 
 # ==============================================================================
-# 2. OTIMIZAÇÃO DE MEMÓRIA (DOWNCASTING)
+# 2. OTIMIZAÇÃO DE MEMÓRIA (DOWNCASTING COM VALIDAÇÃO ESTRITA)
 # ==============================================================================
 
 def downcast_pnadc(df: pd.DataFrame) -> pd.DataFrame:
-    """Converte colunas numéricas/categóricas para Int32 para economizar RAM."""
+    """
+    Converte colunas numericas e categoricas para Int32 de forma estrita.
+    Valores fracionarios e overflows causam erro controlado.
+    Strings nao numericas geram UserWarning e convertem para NA.
+    """
     df = df.copy()
     cols_presentes = [c for c in COLUNAS_INT if c in df.columns]
+
     for col in cols_presentes:
-        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int32")
+        s = df[col]
+        # Converter para numérico para inspeção
+        s_num = pd.to_numeric(s, errors="coerce")
+
+        # Se houver strings não numéricas que viraram NA, checar se havia texto não-nulo
+        if s.dtype == "object":
+            has_invalid_str = s.notna() & s_num.isna() & (s.astype(str).str.strip() != "") & (s.astype(str).str.strip() != "nan") & (s.astype(str).str.strip() != "None")
+            if has_invalid_str.any():
+                warnings.warn(
+                    f"Strings nao numericas encontradas na coluna '{col}' foram convertidas para NA.",
+                    UserWarning
+                )
+
+        # Checar fração em números válidos
+        valid_nums = s_num.dropna()
+        if not valid_nums.empty:
+            has_fraction = (valid_nums % 1 != 0).any()
+            if has_fraction:
+                raise ValueError(f"Valores fracionarios nao sao permitidos em colunas inteiras (coluna '{col}').")
+
+            has_overflow = ((valid_nums > 2147483647) | (valid_nums < -2147483647)).any()
+            if has_overflow:
+                raise ValueError(f"Valor fora do intervalo inteiro de 32-bits (coluna '{col}').")
+
+        df[col] = s_num.astype("Int32")
+
     return df
 
 # ==============================================================================
@@ -74,8 +104,9 @@ def downcast_pnadc(df: pd.DataFrame) -> pd.DataFrame:
 # ==============================================================================
 
 def _normalize_str_code(series: pd.Series) -> pd.Series:
-    s_str = series.astype(str)
-    return s_str.str.replace(r"\.0$", "", regex=True)
+    s_str = series.astype(str).str.replace(r"\.0$", "", regex=True)
+    s_str = s_str.mask(series.isna() | (s_str == "nan") | (s_str == "None") | (s_str.str.strip() == ""), None)
+    return s_str
 
 def _pad2(series: pd.Series) -> pd.Series:
     s_str = _normalize_str_code(series)
@@ -92,14 +123,33 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
 
     df = dados.copy()
 
-    v2008 = pd.to_numeric(df["V2008"], errors="coerce")
-    v20081 = pd.to_numeric(df["V20081"], errors="coerce")
-    v20082 = pd.to_numeric(df["V20082"], errors="coerce")
-    v2007 = pd.to_numeric(df["V2007"], errors="coerce")
+    # Normalizar todos os 8 componentes da chave
+    upa_s   = _normalize_str_code(df["UPA"])
+    v1008_s = _pad2(df["V1008"])
+    v1014_s = _normalize_str_code(df["V1014"])
+    uf_s    = _normalize_str_code(df["UF"])
+    v2007_s = _normalize_str_code(df["V2007"])
+
+    v2008_num  = pd.to_numeric(df["V2008"], errors="coerce")
+    v20081_num = pd.to_numeric(df["V20081"], errors="coerce")
+    v20082_num = pd.to_numeric(df["V20082"], errors="coerce")
+
+    v2008_s  = _pad2(df["V2008"])
+    v20081_s = _pad2(df["V20081"])
+    v20082_s = _normalize_str_code(df["V20082"])
 
     mascara_valida = (
-        v2008.notna() & v20081.notna() & v20082.notna() & v2007.notna()
-        & v2008.ne(99) & v20081.ne(99) & v20082.ne(9999)
+        upa_s.notna()
+        & v1008_s.notna()
+        & v1014_s.notna()
+        & uf_s.notna()
+        & v2007_s.notna()
+        & v2008_num.notna()
+        & v20081_num.notna()
+        & v20082_num.notna()
+        & v2008_num.ne(99)
+        & v20081_num.ne(99)
+        & v20082_num.ne(9999)
     )
 
     df = df[mascara_valida].copy()
@@ -110,18 +160,17 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
         df = df.drop(columns=["V2008", "V20081", "V20082"], errors="ignore")
         return df
 
-    dia = _pad2(df["V2008"])
-    mes = _pad2(df["V20081"])
-    ano = _normalize_str_code(df["V20082"])
-
-    sexo = _normalize_str_code(df["V2007"])
-    uf = _normalize_str_code(df["UF"])
-    upa = _normalize_str_code(df["UPA"])
-    v1008 = _pad2(df["V1008"])
-    v1014 = _normalize_str_code(df["V1014"])
+    upa = upa_s[mascara_valida]
+    v1008 = v1008_s[mascara_valida]
+    v1014 = v1014_s[mascara_valida]
+    uf = uf_s[mascara_valida]
+    v2007 = v2007_s[mascara_valida]
+    dia = v2008_s[mascara_valida]
+    mes = v20081_s[mascara_valida]
+    ano = v20082_s[mascara_valida]
 
     id_dom = upa + v1008 + v1014
-    id_ind = id_dom + dia + mes + ano + sexo + uf
+    id_ind = id_dom + dia + mes + ano + v2007 + uf
 
     df["id_dom"] = id_dom
     df["id_ind"] = id_ind
@@ -445,7 +494,7 @@ def get_pnadc_internal(
 ) -> pd.DataFrame:
     mock = get_mock_provider()
     if mock is not None and callable(mock):
-        return mock(year=year, quarter=quarter, interview=interview, vars=vars, design=design, labels=labels)
+        return mock(year=year, quarter=quarter, interview=interview, vars=vars, design=design, labels=labels, verbose=verbose)
 
     rotulo = (
         f"Download Trimestre {quarter}/{year}" if quarter is not None
@@ -586,38 +635,29 @@ def gerar_painel_pnadc(
     """
     ano_atual = datetime.datetime.now().year
 
-    if ano is None or isinstance(ano, bool) or isinstance(ano, (list, tuple, np.ndarray, pd.Series)):
+    # Validação estrita de ano
+    if ano is None or isinstance(ano, bool) or isinstance(ano, (list, tuple, np.ndarray, pd.Series, str)):
         raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
 
-    try:
-        if isinstance(ano, str):
-            float_val = float(ano)
-            if not float_val.is_integer():
-                raise ValueError("O argumento 'ano' deve ser um numero inteiro valido.")
-            ano_int = int(float_val)
-        elif isinstance(ano, (int, float, np.integer, np.floating)):
-            if np.isnan(ano) or np.isinf(ano):
-                raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
-            if float(ano) != int(ano):
-                raise ValueError("O argumento 'ano' deve ser um numero inteiro valido.")
-            ano_int = int(ano)
-        else:
-            raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
-    except (ValueError, TypeError) as e:
-        if "numero inteiro valido" in str(e) or "Ano invalido" in str(e):
-            raise
-        raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.") from e
+    if not isinstance(ano, (int, np.integer)):
+        raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
 
+    if float(ano) != int(ano):
+        raise ValueError("O argumento 'ano' deve ser um numero inteiro valido.")
+
+    ano_int = int(ano)
     if ano_int < 2012 or ano_int > ano_atual:
         raise ValueError(f"Ano invalido: {ano_int}. A PNAD Continua esta disponivel entre 2012 e {ano_atual}.")
 
-    if not isinstance(balancear, bool):
+    # Validação estrita de flags lógicas (não aceita 0/1 nem strings)
+    if type(balancear) is not bool:
         raise ValueError("O argumento 'balancear' deve ser um unico valor logico (TRUE ou FALSE).")
-    if not isinstance(low_memory, bool):
+    if type(low_memory) is not bool:
         raise ValueError("O argumento 'low_memory' deve ser um unico valor logico (TRUE ou FALSE).")
-    if not isinstance(verbose, bool):
+    if type(verbose) is not bool:
         raise ValueError("O argumento 'verbose' deve ser um unico valor logico (TRUE ou FALSE).")
 
+    # Validação de vars_tri
     if vars_tri is None:
         vars_tri_proc: Optional[List[str]] = list(vars_tri_default)
     elif isinstance(vars_tri, str):
@@ -635,6 +675,7 @@ def gerar_painel_pnadc(
     else:
         raise ValueError("O argumento 'vars_tri' deve ser NULL, 'todas' ou um vetor de caracteres com nomes de variaveis.")
 
+    # Validação de vars_visita
     if vars_visita is None:
         vars_visita_proc: Optional[List[str]] = list(vars_visita_default)
     elif isinstance(vars_visita, str):
