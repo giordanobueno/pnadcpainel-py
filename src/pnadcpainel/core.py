@@ -788,5 +788,4 @@ def gerar_painel_pnadc(
         )
         print(">>> Painel longitudinal concluído.")
 
-    painel_final.attrs["diagnostico"] = diag_tb
     return painel_final

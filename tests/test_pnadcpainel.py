@@ -292,7 +292,7 @@ def test_geracao_de_artefatos_cross_language_normatizados():
     set_mock_provider(mock_full_provider)
     try:
         painel = gerar_painel_pnadc(ano=2023, verbose=False)
-        diag = painel.attrs["diagnostico"]
+        diag = diagnosticar_painel(painel)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             csv_path   = os.path.join(tmpdir, "panel.csv")
@@ -524,7 +524,7 @@ def test_validacao_nenhum_ano_fornecido():
 # ------------------------------------------------------------------------------
 
 def test_gerar_painel_pnadc_mensal_offline_com_mock():
-    from pnadcpainel import gerar_painel_pnadc_mensal, construir_crosswalk_pnadc
+    from pnadcpainel import gerar_painel_pnadc_mensal
 
     set_mock_provider(mock_full_provider)
     try:
@@ -532,7 +532,7 @@ def test_gerar_painel_pnadc_mensal_offline_com_mock():
         assert isinstance(painel_m, pd.DataFrame)
         assert "mes_exato_aaaamm" in painel_m.columns
         assert "peso_mensal" in painel_m.columns
-        assert painel_m.attrs.get("taxa_determinacao_mensal") == 100.0
+        assert type(painel_m) is pd.DataFrame
     finally:
         set_mock_provider(None)
 
@@ -554,5 +554,35 @@ def test_construir_crosswalk_pnadc_python():
     assert isinstance(cw, pd.DataFrame)
     assert "ref_month_yyyymm" in cw.columns
     assert "mes_exato_aaaamm" in cw.columns
+
+
+# ------------------------------------------------------------------------------
+# 9. TESTES DE DATAFRAME PURO E OPERAÇÕES PANDAS CONVENCIONAIS
+# ------------------------------------------------------------------------------
+
+def test_painel_retorna_dataframe_puro_e_permite_operacoes_padrao():
+    from pnadcpainel import gerar_painel_pnadc_mensal
+
+    set_mock_provider(mock_full_provider)
+    try:
+        painel_m = gerar_painel_pnadc_mensal(ano=2023, verbose=False)
+        
+        # Garante que e um pd.DataFrame comum sem atributos problematicos
+        assert type(painel_m) is pd.DataFrame
+        assert len(painel_m.attrs) == 0
+
+        # Testa head(10), tail(), to_string() exatamente como um CSV lido por pd.read_csv()
+        repr_output = repr(painel_m.head(10))
+        assert isinstance(repr_output, str)
+
+        str_output = painel_m.to_string()
+        assert isinstance(str_output, str)
+
+        # Concatenação e fatiamento funcionam sem interferência
+        painel_concat = pd.concat([painel_m.iloc[:1], painel_m.iloc[1:]])
+        assert len(painel_concat) == len(painel_m)
+    finally:
+        set_mock_provider(None)
+
 
 

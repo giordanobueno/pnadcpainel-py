@@ -53,7 +53,7 @@ painel_2023 = gerar_painel_pnadc(ano=2023)
 print(painel_2023.head())
 
 # Visualizar a tabela de diagnóstico de preenchimento
-print(painel_2023.attrs["diagnostico"])
+print(diagnosticar_painel(painel_2023))
 ```
 
 ### 2. Painel Mensalizado (Mês Exato + Pesos Calibrados)
@@ -169,16 +169,16 @@ Esta opção grava arquivos intermediários de cada trimestre em disco temporár
 
 ---
 
-## 📊 Atributo e Função de Diagnóstico
+## 📊 Função de Diagnóstico
 
-No resultado retornado (`DataFrame`), a tabela de diagnóstico do painel fica salva no dicionário de atributos `.attrs`:
+Para gerar a tabela de diagnóstico de preenchimento do painel, chame a função `diagnosticar_painel`:
 
 ```python
-diag_df = painel_2023.attrs["diagnostico"]
+diag_df = diagnosticar_painel(painel_2023)
 print(diag_df)
 ```
 
-Você também pode chamar a função explícita `diagnosticar_painel`:
+Você também pode especificar colunas específicas:
 
 ```python
 diag_df = diagnosticar_painel(painel_2023, colunas=["VD5002", "S01013"])
@@ -190,7 +190,7 @@ diag_df = diagnosticar_painel(painel_2023, colunas=["VD5002", "S01013"])
 
 | Função em R | Função em Python | Status Público | Parâmetros e Defaults | Tipo de Retorno |
 | :--- | :--- | :--- | :--- | :--- |
-| `gerar_painel_pnadc()` | `gerar_painel_pnadc()` | Exportada | `ano` (int), `vars_tri=None`, `vars_visita=None`, `balancear=True`, `low_memory=False`, `verbose=True` | `pd.DataFrame` (com `.attrs["diagnostico"]`) |
+| `gerar_painel_pnadc()` | `gerar_painel_pnadc()` | Exportada | `ano` (int), `vars_tri=None`, `vars_visita=None`, `balancear=True`, `low_memory=False`, `verbose=True` | `pd.DataFrame` |
 | `criar_ids_datazoom()` | `criar_ids_datazoom()` | Exportada | `dados` (`pd.DataFrame`) | `pd.DataFrame` |
 | `consolidar_base_habitacao()` | `consolidar_base_habitacao()` | Exportada | `ano` (int), `vars_visita=vars_visita_default`, `verbose=True` | `pd.DataFrame` |
 | `diagnosticar_painel()` | `diagnosticar_painel()` | Exportada | `painel` (`pd.DataFrame`), `colunas=None` | `pd.DataFrame` |

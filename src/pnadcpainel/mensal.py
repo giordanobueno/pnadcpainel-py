@@ -85,8 +85,6 @@ def gerar_painel_pnadc_mensal(
             painel_mensal["mes_exato_aaaamm"] = painel_mensal["Ano"].astype(str) + meses_num
             painel_mensal["ref_month_yyyymm"] = painel_mensal["mes_exato_aaaamm"]
 
-        painel_mensal.attrs["diagnostico"] = painel_tri.attrs.get("diagnostico")
-        painel_mensal.attrs["taxa_determinacao_mensal"] = 100.0
         return painel_mensal
 
     # Execução em produção
@@ -102,8 +100,5 @@ def gerar_painel_pnadc_mensal(
 
     if verbose:
         print(f">>> Taxa de determinação de mês exato: {taxa_det:.2f}%")
-
-    painel_mensal.attrs["diagnostico"] = painel_tri.attrs.get("diagnostico")
-    painel_mensal.attrs["taxa_determinacao_mensal"] = taxa_det
 
     return painel_mensal
