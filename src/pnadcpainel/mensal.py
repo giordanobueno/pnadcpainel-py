@@ -2,6 +2,7 @@
 Função principal para geração do painel longitudinal PNAD Contínua com identificação de mês exato (mensalização).
 """
 
+import gc
 import warnings
 import pandas as pd
 import numpy as np
@@ -85,6 +86,8 @@ def gerar_painel_pnadc_mensal(
             painel_mensal["mes_exato_aaaamm"] = painel_mensal["Ano"].astype(str) + meses_num
             painel_mensal["ref_month_yyyymm"] = painel_mensal["mes_exato_aaaamm"]
 
+        del painel_tri, cw
+        gc.collect()
         return painel_mensal
 
     # Execução em produção
@@ -100,5 +103,8 @@ def gerar_painel_pnadc_mensal(
 
     if verbose:
         print(f">>> Taxa de determinação de mês exato: {taxa_det:.2f}%")
+
+    del painel_tri, cw
+    gc.collect()
 
     return painel_mensal

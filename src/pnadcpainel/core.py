@@ -115,7 +115,7 @@ def _pad2(series: pd.Series) -> pd.Series:
 def _format_key_str(series: pd.Series) -> pd.Series:
     return _normalize_str_code(series)
 
-def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
+def criar_ids_datazoom(dados: pd.DataFrame, preservar_colunas: Optional[List[str]] = None) -> pd.DataFrame:
     """Cria identificadores longitudinais id_dom e id_ind com a metodologia Data Zoom (PUC-Rio)."""
     faltantes = [c for c in COLUNAS_REQUERIDAS_ID if c not in dados.columns]
     if faltantes:
@@ -154,10 +154,13 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
 
     df = df[mascara_valida].copy()
 
+    cols_preservar = set(preservar_colunas) if preservar_colunas else set()
+    cols_remover = [c for c in ["V2008", "V20081", "V20082"] if c not in cols_preservar]
+
     if df.empty:
         df["id_dom"] = pd.Series(dtype="object")
         df["id_ind"] = pd.Series(dtype="object")
-        df = df.drop(columns=["V2008", "V20081", "V20082"], errors="ignore")
+        df = df.drop(columns=cols_remover, errors="ignore")
         return df
 
     upa = upa_s[mascara_valida]
@@ -175,7 +178,7 @@ def criar_ids_datazoom(dados: pd.DataFrame) -> pd.DataFrame:
     df["id_dom"] = id_dom
     df["id_ind"] = id_ind
 
-    df = df.drop(columns=["V2008", "V20081", "V20082"], errors="ignore")
+    df = df.drop(columns=cols_remover, errors="ignore")
     return df
 
 # ==============================================================================
@@ -603,7 +606,7 @@ def baixar_trimestres_pnadc(
                 raise RuntimeError(f"Download vazio ou nulo para o Trimestre {tri} de {ano}.")
 
             dados_brutos = downcast_pnadc(dados_brutos)
-            dados_proc = criar_ids_datazoom(dados_brutos)
+            dados_proc = criar_ids_datazoom(dados_brutos, preservar_colunas=vars_tri)
 
             if low_memory:
                 tpath = os.path.join(tmpdir, f"pnadc_tri_{ano}_{tri}.pkl")
