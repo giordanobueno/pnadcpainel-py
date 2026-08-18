@@ -33,7 +33,7 @@ Para maiores detalhes sobre a metodologia original e publicações acadêmicas d
 Instale a versão de desenvolvimento diretamente do GitHub:
 
 ```bash
-pip install git+https://github.com/giordanobueno/pnadcpainel-py.git
+!pip install git+https://github.com/giordanobueno/pnadcpainel-py.git
 ```
 
 > *Nota: A publicação no PyPI (`pip install pnadcpainel`) estará disponível em breve.*
