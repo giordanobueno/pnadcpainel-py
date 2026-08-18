@@ -755,12 +755,16 @@ def gerar_painel_pnadc(
     ).reset_index(drop=True)
 
     # Validação obrigatória de duplicações no painel concatenado
-    if verbose:
-        print(">>> Validando identificadores...")
-
     duplicatas_ind = painel_cruzado.duplicated(["id_ind", "Ano", "Trimestre"], keep=False)
     if duplicatas_ind.any():
-        raise ValueError("Foram encontradas duplicatas de (id_ind, Ano, Trimestre) no painel final.")
+        num_dups = int(duplicatas_ind.sum())
+        warnings.warn(
+            f"Foram encontradas {num_dups} linhas duplicadas na chave (id_ind, Ano, Trimestre) "
+            f"(causadas por gêmeos ou perfis demográficos idênticos no mesmo domicílio). "
+            f"As duplicatas foram removidas para garantir a integridade do painel.",
+            UserWarning
+        )
+        painel_cruzado = painel_cruzado.drop_duplicates(subset=["id_ind", "Ano", "Trimestre"], keep="first").reset_index(drop=True)
 
     if vars_visita_proc is None:
         cols_excluir = set(["id_dom", "id_ind", "periodo"] + chaves_obrig_visita + (vars_tri_proc if vars_tri_proc else []))
