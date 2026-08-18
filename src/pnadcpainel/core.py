@@ -226,7 +226,7 @@ def mensagem_diagnostico(
     diagnostico: Optional[pd.DataFrame],
     painel_antes: Optional[pd.DataFrame],
     painel_depois: Optional[pd.DataFrame],
-    ano: int
+    ano: Union[int, str]
 ) -> str:
     """Emite no console a mensagem estruturada de perda de dados."""
     n_antes = len(painel_antes) if painel_antes is not None else 0
@@ -621,7 +621,8 @@ def baixar_trimestres_pnadc(
     return painel_pessoas
 
 def gerar_painel_pnadc(
-    ano: int,
+    ano: Optional[Union[int, np.integer]] = None,
+    anos: Optional[Union[List[int], range, tuple, np.ndarray, pd.Series]] = None,
     vars_tri: Optional[Union[List[str], str]] = None,
     vars_visita: Optional[Union[List[str], str]] = None,
     balancear: bool = True,
@@ -630,24 +631,53 @@ def gerar_painel_pnadc(
 ) -> pd.DataFrame:
     """
     Baixa e cruza a base trimestral de pessoas com a base de Visita 1 de domicílios
-    da PNAD Contínua para um determinado ano, identificando domicílios e indivíduos
-    com a metodologia Data Zoom (PUC-Rio).
+    da PNAD Contínua para um único ano ou uma sequência de anos, identificando domicílios
+    e indivíduos com a metodologia Data Zoom (PUC-Rio).
     """
     ano_atual = datetime.datetime.now().year
 
-    # Validação estrita de ano
-    if ano is None or isinstance(ano, bool) or isinstance(ano, (list, tuple, np.ndarray, pd.Series, str)):
-        raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
+    # Validação de mutualidade entre 'ano' e 'anos'
+    if ano is not None and anos is not None:
+        raise ValueError("Informe apenas 'ano' ou 'anos', não ambos.")
 
-    if not isinstance(ano, (int, np.integer)):
-        raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
+    if ano is None and anos is None:
+        raise ValueError("Informe 'ano' ou 'anos'.")
 
-    if float(ano) != int(ano):
-        raise ValueError("O argumento 'ano' deve ser um numero inteiro valido.")
+    anos_lista: List[int] = []
 
-    ano_int = int(ano)
-    if ano_int < 2012 or ano_int > ano_atual:
-        raise ValueError(f"Ano invalido: {ano_int}. A PNAD Continua esta disponivel entre 2012 e {ano_atual}.")
+    if ano is not None:
+        if isinstance(ano, bool) or isinstance(ano, (list, tuple, np.ndarray, pd.Series, str)):
+            raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
+        if not isinstance(ano, (int, np.integer)):
+            raise ValueError("O argumento 'ano' deve ser um unico numero inteiro valido.")
+        if float(ano) != int(ano):
+            raise ValueError("O argumento 'ano' deve ser um numero inteiro valido.")
+        ano_int = int(ano)
+        if ano_int < 2012 or ano_int > ano_atual:
+            raise ValueError(f"Ano invalido: {ano_int}. A PNAD Continua esta disponivel entre 2012 e {ano_atual}.")
+        anos_lista = [ano_int]
+    else:
+        if isinstance(anos, bool) or isinstance(anos, str):
+            raise ValueError("O argumento 'anos' deve ser uma lista, tupla, range ou array de inteiros.")
+        try:
+            raw_anos = list(anos)
+        except Exception as e:
+            raise ValueError("O argumento 'anos' deve ser uma lista, tupla, range ou array de inteiros.") from e
+        if len(raw_anos) == 0:
+            raise ValueError("O argumento 'anos' nao pode ser uma lista vazia.")
+
+        parsed_anos = []
+        for x in raw_anos:
+            if isinstance(x, bool) or not isinstance(x, (int, np.integer, float)):
+                raise ValueError("Todos os elementos de 'anos' devem ser numeros inteiros validos.")
+            if float(x) != int(x):
+                raise ValueError("Todos os elementos de 'anos' devem ser numeros inteiros validos.")
+            x_int = int(x)
+            if x_int < 2012 or x_int > ano_atual:
+                raise ValueError(f"Ano invalido em 'anos': {x_int}. A PNAD Continua esta disponivel entre 2012 e {ano_atual}.")
+            parsed_anos.append(x_int)
+
+        anos_lista = sorted(list(dict.fromkeys(parsed_anos)))
 
     # Validação estrita de flags lógicas (não aceita 0/1 nem strings)
     if type(balancear) is not bool:
@@ -693,21 +723,47 @@ def gerar_painel_pnadc(
     else:
         raise ValueError("O argumento 'vars_visita' deve ser NULL, 'todas' ou um vetor de caracteres com nomes de variaveis.")
 
-    painel_pessoas = baixar_trimestres_pnadc(
-        ano=ano_int, vars_tri=vars_tri_proc, low_memory=low_memory, verbose=verbose
+    paineis_anuais = []
+    for a in anos_lista:
+        painel_pessoas_a = baixar_trimestres_pnadc(
+            ano=a, vars_tri=vars_tri_proc, low_memory=low_memory, verbose=verbose
+        )
+
+        base_habitacao_a = consolidar_base_habitacao(
+            ano=a, vars_visita=vars_visita_proc, verbose=verbose
+        )
+
+        if verbose:
+            print(f">>> Realizando o cruzamento final do ano {a} (left_join por id_dom)...")
+
+        painel_cruzado_a = pd.merge(painel_pessoas_a, base_habitacao_a, on="id_dom", how="left")
+        paineis_anuais.append(painel_cruzado_a)
+
+    if verbose and len(anos_lista) > 1:
+        print(f">>> Concatenando {len(anos_lista)} anos...")
+
+    painel_cruzado = pd.concat(paineis_anuais, ignore_index=True)
+
+    # Variável temporal auxiliar 'periodo'
+    painel_cruzado["periodo"] = (
+        painel_cruzado["Ano"].astype(str) + "_" + painel_cruzado["Trimestre"].astype(str)
     )
 
-    base_habitacao = consolidar_base_habitacao(
-        ano=ano_int, vars_visita=vars_visita_proc, verbose=verbose
-    )
+    # Ordenação temporal por indivíduo, ano e trimestre
+    painel_cruzado = painel_cruzado.sort_values(
+        by=["id_ind", "Ano", "Trimestre"], kind="mergesort"
+    ).reset_index(drop=True)
 
+    # Validação obrigatória de duplicações no painel concatenado
     if verbose:
-        print(">>> Realizando o cruzamento final (left_join por id_dom)...")
+        print(">>> Validando identificadores...")
 
-    painel_cruzado = pd.merge(painel_pessoas, base_habitacao, on="id_dom", how="left")
+    duplicatas_ind = painel_cruzado.duplicated(["id_ind", "Ano", "Trimestre"], keep=False)
+    if duplicatas_ind.any():
+        raise ValueError("Foram encontradas duplicatas de (id_ind, Ano, Trimestre) no painel final.")
 
     if vars_visita_proc is None:
-        cols_excluir = set(["id_dom", "id_ind"] + chaves_obrig_visita + (vars_tri_proc if vars_tri_proc else []))
+        cols_excluir = set(["id_dom", "id_ind", "periodo"] + chaves_obrig_visita + (vars_tri_proc if vars_tri_proc else []))
         vars_hab_especificas = [c for c in painel_cruzado.columns if c not in cols_excluir]
     else:
         vars_hab_especificas = [c for c in vars_visita_proc if c not in chaves_obrig_visita]
@@ -722,9 +778,11 @@ def gerar_painel_pnadc(
         painel_final = painel_cruzado.copy()
 
     if verbose and len(diag_tb) > 0:
+        ano_label = f"{anos_lista[0]}-{anos_lista[-1]}" if len(anos_lista) > 1 else anos_lista[0]
         mensagem_diagnostico(
-            diagnostico=diag_tb, painel_antes=painel_cruzado, painel_depois=painel_final, ano=ano_int
+            diagnostico=diag_tb, painel_antes=painel_cruzado, painel_depois=painel_final, ano=ano_label
         )
+        print(">>> Painel longitudinal concluído.")
 
     painel_final.attrs["diagnostico"] = diag_tb
     return painel_final

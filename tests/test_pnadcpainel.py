@@ -176,9 +176,9 @@ def test_mensagem_diagnostico_formatacao_brasileira_completa():
 # ------------------------------------------------------------------------------
 
 def test_gerar_painel_pnadc_valida_o_ano_de_entrada_rigorosamente():
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError, match="Informe 'ano' ou 'anos'"):
         gerar_painel_pnadc()
-    with pytest.raises(ValueError, match="deve ser um unico numero inteiro valido"):
+    with pytest.raises(ValueError, match="Informe 'ano' ou 'anos'"):
         gerar_painel_pnadc(ano=None)
     with pytest.raises(ValueError, match="deve ser um unico numero inteiro valido"):
         gerar_painel_pnadc(ano="2023") # Rejeita string numérica no Python para paridade com R
@@ -334,3 +334,225 @@ def test_geracao_de_artefatos_cross_language_normatizados():
             assert os.path.exists(meta_path)
     finally:
         set_mock_provider(None)
+
+
+# ------------------------------------------------------------------------------
+# 7. TESTES DE PAINEL LONGITUDINAL MULTI-ANO (CASOS DE USO 1 A 10)
+# ------------------------------------------------------------------------------
+
+def mock_multiyear_provider(year, quarter=None, interview=None, vars=None, **kwargs):
+    if quarter is not None:
+        records = []
+        # Person A (Ind 1): present in 2023 Q1..Q4 and 2024 Q1 (T4->T1 continuity!)
+        if (year == 2023) or (year == 2024 and quarter == 1):
+            records.append({
+                "UPA": "110000016", "V1008": "01", "V1014": "10", "Ano": year, "Trimestre": quarter, "UF": "11",
+                "V2007": 1, "V2008": 15, "V20081": 5, "V20082": 1990,
+                "V2001": 2, "V2005": 1, "V2009": 33, "VD3004": 7, "V3001": 1,
+                "VD4001": 1, "VD4002": 1, "VD4009": 1, "VD4020": 3500.0, "VD4010": 1
+            })
+        # Person B (Ind 2): present ONLY in 2023 Q4 (observed only once)
+        if year == 2023 and quarter == 4:
+            records.append({
+                "UPA": "110000016", "V1008": "01", "V1014": "10", "Ano": year, "Trimestre": quarter, "UF": "11",
+                "V2007": 2, "V2008": 20, "V20081": 8, "V20082": 1992,
+                "V2001": 2, "V2005": 2, "V2009": 31, "VD3004": 6, "V3001": 1,
+                "VD4001": 1, "VD4002": 1, "VD4009": 3, "VD4020": 2800.0, "VD4010": 2
+            })
+        # Person C (Ind 3): present in 2023 Q1 and 2023 Q2 (observed twice)
+        if year == 2023 and quarter in (1, 2):
+            records.append({
+                "UPA": "110000016", "V1008": "02", "V1014": "10", "Ano": year, "Trimestre": quarter, "UF": "11",
+                "V2007": 1, "V2008": 5, "V20081": 1, "V20082": 1985,
+                "V2001": 2, "V2005": 1, "V2009": 38, "VD3004": 5, "V3001": 1,
+                "VD4001": 1, "VD4002": 1, "VD4009": 1, "VD4020": 5000.0, "VD4010": 1
+            })
+        # Person D (Ind 4): present in all quarters of 2023 and 2024
+        records.append({
+            "UPA": "110000016", "V1008": "02", "V1014": "10", "Ano": year, "Trimestre": quarter, "UF": "11",
+            "V2007": 2, "V2008": 12, "V20081": 11, "V20082": 1988,
+            "V2001": 2, "V2005": 2, "V2009": 35, "VD3004": 7, "V3001": 1,
+            "VD4001": 1, "VD4002": 1, "VD4009": 1, "VD4020": 4000.0, "VD4010": 1
+        })
+        df = pd.DataFrame(records)
+    else:
+        df = pd.DataFrame({
+            "UPA": ["110000016", "110000016"],
+            "V1008": ["01", "02"],
+            "V1014": ["10", "10"],
+            "Ano": [year, year],
+            "UF": ["11", "11"],
+            "V5001A": [2, 2],
+            "VD5002": [1500.0, 2500.0],
+            "V5002A": [2, 2],
+            "S01013": [1, 1],
+            "S01006": [2, 3],
+            "S01010": [1, 1]
+        })
+    if vars is not None:
+        chaves = ["UPA", "V1008", "V1014", "Ano", "UF"] if interview is not None else ["UPA", "V1008", "V1014", "V2008", "V20081", "V20082", "V2007", "UF", "Ano", "Trimestre"]
+        cols = list(dict.fromkeys(chaves + [c for c in vars if c in df.columns]))
+        return df[cols].copy()
+    return df
+
+def test_caso_1_um_unico_ano():
+    set_mock_provider(mock_full_provider)
+    try:
+        painel = gerar_painel_pnadc(ano=2023, verbose=False)
+        assert len(painel) > 0
+        assert set(painel["Ano"].unique()) == {2023}
+        assert set(painel["Trimestre"].unique()) == {1, 2, 3, 4}
+    finally:
+        set_mock_provider(None)
+
+def test_caso_2_dois_anos_consecutivos_range_e_lista():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel_range = gerar_painel_pnadc(anos=range(2023, 2025), verbose=False)
+        painel_list  = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+
+        assert set(painel_range["Ano"].unique()) == {2023, 2024}
+        assert painel_range.shape == painel_list.shape
+        assert "periodo" in painel_range.columns
+    finally:
+        set_mock_provider(None)
+
+def test_caso_3_continuidade_t4_para_t1():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+        # Person A ID
+        id_person_a = "110000016011015051990111"
+        obs_person_a = painel[painel["id_ind"] == id_person_a]
+        periodos_a = list(obs_person_a["periodo"])
+
+        # Deve conter 2023_4 e 2024_1 com o mesmo id_ind
+        assert "2023_4" in periodos_a
+        assert "2024_1" in periodos_a
+        idx_2023_4 = periodos_a.index("2023_4")
+        idx_2024_1 = periodos_a.index("2024_1")
+        assert idx_2024_1 == idx_2023_4 + 1
+    finally:
+        set_mock_provider(None)
+
+def test_caso_4_individuo_observado_apenas_uma_vez():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+        # Person B ID (present only in 2023 T4)
+        id_person_b = "110000016011020081992211"
+        obs_person_b = painel[painel["id_ind"] == id_person_b]
+        assert len(obs_person_b) == 1
+        assert obs_person_b["periodo"].iloc[0] == "2023_4"
+    finally:
+        set_mock_provider(None)
+
+def test_caso_5_individuo_observado_em_dois_trimestres():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+        # Person C ID (present in 2023 T1 and 2023 T2)
+        id_person_c = "110000016021005011985111"
+        obs_person_c = painel[painel["id_ind"] == id_person_c]
+        assert len(obs_person_c) == 2
+        assert list(obs_person_c["periodo"]) == ["2023_1", "2023_2"]
+    finally:
+        set_mock_provider(None)
+
+def test_caso_6_individuo_observado_em_todos_os_trimestres():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+        # Person D ID (present in all 8 quarters)
+        id_person_d = "110000016021012111988211"
+        obs_person_d = painel[painel["id_ind"] == id_person_d]
+        assert len(obs_person_d) == 8
+    finally:
+        set_mock_provider(None)
+
+def test_caso_7_nao_duplicacao_no_chave_natural():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2023, 2024], verbose=False)
+        dups = painel.duplicated(["id_ind", "Ano", "Trimestre"])
+        assert dups.sum() == 0
+    finally:
+        set_mock_provider(None)
+
+def test_caso_8_backward_compatibility():
+    set_mock_provider(mock_full_provider)
+    try:
+        painel_ano = gerar_painel_pnadc(ano=2023, verbose=False)
+        assert len(painel_ano) > 0
+        assert "periodo" in painel_ano.columns
+        assert painel_ano["periodo"].iloc[0].startswith("2023_")
+    finally:
+        set_mock_provider(None)
+
+def test_caso_9_balancear_nao_elimina_presencas_longitudinais_parciais():
+    set_mock_provider(mock_multiyear_provider)
+    try:
+        painel_bal = gerar_painel_pnadc(anos=[2023, 2024], balancear=True, verbose=False)
+        # Person B (1 observação) e Person C (2 observações) devem ser mantidos no balanceamento de habitação
+        ids_presentes = set(painel_bal["id_ind"])
+        assert "110000016011020081992211" in ids_presentes
+        assert "110000016021005011985111" in ids_presentes
+    finally:
+        set_mock_provider(None)
+
+def test_caso_10_anos_nao_consecutivos():
+    set_mock_provider(mock_full_provider)
+    try:
+        painel = gerar_painel_pnadc(anos=[2020, 2022], verbose=False)
+        anos_presentes = set(painel["Ano"].unique())
+        assert anos_presentes == {2020, 2022}
+        assert 2021 not in anos_presentes
+    finally:
+        set_mock_provider(None)
+
+def test_validacao_conflito_ano_e_anos():
+    with pytest.raises(ValueError, match="Informe apenas 'ano' ou 'anos', não ambos"):
+        gerar_painel_pnadc(ano=2023, anos=[2023, 2024])
+
+def test_validacao_nenhum_ano_fornecido():
+    with pytest.raises(ValueError, match="Informe 'ano' ou 'anos'"):
+        gerar_painel_pnadc()
+
+
+# ------------------------------------------------------------------------------
+# 8. TESTES DE MENSALIZAÇÃO DA PNADC (HECKSHER & BARBOSA, 2026)
+# ------------------------------------------------------------------------------
+
+def test_gerar_painel_pnadc_mensal_offline_com_mock():
+    from pnadcpainel import gerar_painel_pnadc_mensal, construir_crosswalk_pnadc
+
+    set_mock_provider(mock_full_provider)
+    try:
+        painel_m = gerar_painel_pnadc_mensal(ano=2023, verbose=False)
+        assert isinstance(painel_m, pd.DataFrame)
+        assert "mes_exato_aaaamm" in painel_m.columns
+        assert "peso_mensal" in painel_m.columns
+        assert painel_m.attrs.get("taxa_determinacao_mensal") == 100.0
+    finally:
+        set_mock_provider(None)
+
+def test_construir_crosswalk_pnadc_python():
+    from pnadcpainel import construir_crosswalk_pnadc
+
+    df_sample = pd.DataFrame({
+        "UPA": ["110000016", "110000016"],
+        "V1014": ["10", "10"],
+        "Ano": [2023, 2023],
+        "Trimestre": [1, 2],
+        "V2008": [15, 15],
+        "V20081": [5, 5],
+        "V20082": [1990, 1990],
+        "V2009": [33, 33]
+    })
+
+    cw = construir_crosswalk_pnadc(df_sample)
+    assert isinstance(cw, pd.DataFrame)
+    assert "ref_month_yyyymm" in cw.columns
+    assert "mes_exato_aaaamm" in cw.columns
+
+

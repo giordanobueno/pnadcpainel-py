@@ -42,6 +42,7 @@ Instale a versão de desenvolvimento diretamente do GitHub:
 
 ## 💻 Exemplo Rápido de Uso
 
+### 1. Painel Anual (Compatibilidade Retroativa)
 ```python
 from pnadcpainel import gerar_painel_pnadc, diagnosticar_painel
 
@@ -54,6 +55,46 @@ print(painel_2023.head())
 # Visualizar a tabela de diagnóstico de preenchimento
 print(painel_2023.attrs["diagnostico"])
 ```
+
+### 2. Painel Mensalizado (Mês Exato + Pesos Calibrados)
+Para obter os microdados identificando o **mês exato de referência** e os **pesos amostrais calibrados** (metodologia Hecksher & Barbosa, 2026):
+
+```python
+from pnadcpainel import gerar_painel_pnadc_mensal
+
+# Gera o painel mensalizado para o ano de 2023
+painel_mensal = gerar_painel_pnadc_mensal(ano=2023)
+
+# Colunas geradas: mes_exato_aaaamm e peso_mensal
+print(painel_mensal[["id_dom", "id_ind", "mes_exato_aaaamm", "peso_mensal"]].head())
+```
+
+### 2. Painel Longitudinal Multi-Ano
+Para obter um único painel longitudinal cobrindo uma sequência de anos (por exemplo, 2020 a 2025):
+
+```python
+# Gerar um único painel longitudinal com 24 trimestres consecutivos (2020 T1 até 2025 T4)
+painel_multi = gerar_painel_pnadc(anos=range(2020, 2026))
+
+# Ou passando uma lista explícita de anos:
+painel_multi = gerar_painel_pnadc(anos=[2020, 2021, 2022, 2023, 2024, 2025])
+```
+
+---
+
+## 🗓️ Painel Longitudinal Multi-Ano
+
+A extensão multi-ano permite acompanhar indivíduos e domicílios ao longo de extensas janelas temporais sem criar artificialmente "fronteiras de painel" na virada de ano:
+
+- **Unidade de Observação**: A unidade de observação é **indivíduo × ano × trimestre** (`id_ind × Ano × Trimestre`).
+- **Múltiplas Observações**: O mesmo indivíduo (`id_ind`) aparece em múltiplos trimestres em que esteve presente na amostra. **Não é realizada nenhuma deduplicação por `id_ind`**.
+- **Continuidade T4 → T1**: A virada do 4º trimestre de um ano para o 1º trimestre do ano seguinte (`2020 T4 → 2021 T1`) é tratada como um par de períodos consecutivos sem quebrar o painel.
+- **Painel Não Balanceado**: A ausência de observação em um trimestre não elimina o indivíduo. Indivíduos presentes em apenas 1, 2 ou alguns trimestres são totalmente preservados. Não são criadas linhas artificiais com `NaN` para períodos ausentes.
+- **Semântica do `balancear`**: O parâmetro `balancear` refere-se estritamente ao tratamento de dados ausentes nas variáveis de Visita 1 (habitação) e **não exige presença do indivíduo em todas as 5 entrevistas**.
+- **Variável Auxiliar `periodo`**: É gerada a coluna `periodo` (ex.: `"2020_1"`, `"2020_4"`, `"2021_1"`) indicando a sequência temporal cronológica.
+
+> ⚠️ **Nota Metodológica sobre Pesos Amostrais**:
+> A quantidade de observações de uma pessoa ao longo do painel **não altera seu peso amostral**. Ter 5 observações da Pessoa A e 1 observação da Pessoa B **não significa** `peso A = 5 × peso B`. Estimativas populacionais ou inferências com amostragem complexa devem tratar os pesos amostrais e a estrutura longitudinal separadamente.
 
 ---
 
