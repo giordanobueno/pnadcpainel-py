@@ -528,10 +528,12 @@ def test_gerar_painel_pnadc_mensal_offline_com_mock():
 
     set_mock_provider(mock_full_provider)
     try:
-        painel_m = gerar_painel_pnadc_mensal(ano=2023, verbose=False)
+        painel_m = gerar_painel_pnadc_mensal(ano=2023, filtrar_indeterminados=True, verbose=False)
         assert isinstance(painel_m, pd.DataFrame)
+        assert len(painel_m) > 0
         assert "mes_exato_aaaamm" in painel_m.columns
         assert "peso_mensal" in painel_m.columns
+        assert painel_m["mes_exato_aaaamm"].notna().all()
         assert type(painel_m) is pd.DataFrame
     finally:
         set_mock_provider(None)
